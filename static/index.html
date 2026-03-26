@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SupplyTrack Storefront</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-bg"></div>
+
+    <div class="app-layout">
+        <!-- Top Navigation -->
+        <header class="navbar">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <span>SupplyTrack Procurement</span>
+            </div>
+            
+            <div class="search-bar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search products, categories...">
+            </div>
+
+            <div class="user-profile">
+                <div class="user-info">
+                    <select id="currentUserSelect" class="user-select">
+                        <option value="">Loading users...</option>
+                    </select>
+                    <span class="co2-status" id="userCo2Status">Target: -- CO₂/kg</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <div class="catalogue-section">
+                <div class="section-header">
+                    <h2>Available Products</h2>
+                    <div class="filters">
+                        <button class="filter-btn active" data-cat="all">All</button>
+                        <button class="filter-btn" data-cat="Electronics">Electronics</button>
+                        <button class="filter-btn" data-cat="Industrial">Industrial</button>
+                        <button class="filter-btn" data-cat="Food">Food</button>
+                    </div>
+                </div>
+                
+                <div class="product-grid" id="productGrid">
+                    <div class="loader-container" id="gridLoader">
+                        <div class="spinner"></div>
+                    </div>
+                    <!-- Product Cards Injected Here -->
+                </div>
+            </div>
+
+            <!-- Route Optimization & Checkout Panel -->
+            <aside class="checkout-panel hidden" id="checkoutPanel">
+                <div class="panel-header">
+                    <h3>Configure Order</h3>
+                    <button class="icon-btn" id="closePanelBtn">×</button>
+                </div>
+                
+                <div class="panel-content" id="panelContent">
+                    <!-- Product summary injected here -->
+                </div>
+                
+                <div class="panel-footer hidden" id="panelFooter">
+                    <div class="price-summary">
+                        <span>Total Checkout:</span>
+                        <h3 id="checkoutTotal">$0.00</h3>
+                    </div>
+                    <button class="btn-primary full-width" id="placeOrderBtn">
+                        Place Order
+                        <div class="spinner hidden" id="orderSpinner"></div>
+                    </button>
+                    <div id="orderMessage" class="message hidden"></div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Success Toast -->
+    <div class="toast" id="toast">Order Placed Successfully!</div>
+
+    <script src="script.js"></script>
+</body>
+</html>
