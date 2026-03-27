@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SupplyTrack Storefront</title>
+    <title>Coffee Supply Procurement</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <div class="app-bg"></div>
@@ -17,81 +17,221 @@
         <header class="navbar">
             <div class="logo">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                    <polyline points="2 17 12 22 22 17"></polyline>
-                    <polyline points="2 12 12 17 22 12"></polyline>
+                    <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line>
                 </svg>
-                <span>SupplyTrack Procurement</span>
+                <span>Coffee Supply Co.</span>
             </div>
             
-            <div class="search-bar">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" id="searchInput" placeholder="Search products, categories...">
-            </div>
+            <div class="nav-controls">
+                <div class="search-bar hidden" id="globalSearchBar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Search beans, milks...">
+                </div>
+                
+                <span class="co2-status hidden" id="userCo2Status">Target: -- CO₂</span>
 
-            <div class="user-profile">
-                <div class="user-info">
-                    <select id="currentUserSelect" class="user-select">
-                        <option value="">Loading users...</option>
+                <!-- SINGLE GLOBAL DROPDOWN -->
+                <div style="display:flex; flex-direction:column; align-items:flex-end">
+                    <span style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.2rem">Log in As:</span>
+                    <select id="globalAuthSelect" class="user-select">
+                        <option value="">Loading accounts...</option>
                     </select>
-                    <span class="co2-status" id="userCo2Status">Target: -- CO₂/kg</span>
                 </div>
             </div>
         </header>
 
         <!-- Main Workspace -->
-        <main class="workspace">
-            <div class="catalogue-section">
-                <div class="section-header">
-                    <h2>Available Products</h2>
-                    <div class="filters">
-                        <button class="filter-btn active" data-cat="all">All</button>
-                        <button class="filter-btn" data-cat="Electronics">Electronics</button>
-                        <button class="filter-btn" data-cat="Industrial">Industrial</button>
-                        <button class="filter-btn" data-cat="Food">Food</button>
+        <main class="workspace" id="mainWorkspace" style="display:none">
+            
+            <!-- ================= BUYER VIEW ================= -->
+            <div id="buyerView" class="view-container">
+                <!-- Buyer Tabs -->
+                <div class="tabs-nav">
+                    <button class="tab-btn active" data-target="buyerStorefrontTab">Storefront Catalog</button>
+                    <button class="tab-btn" data-target="buyerOrdersTab">My Orders</button>
+                </div>
+
+                <!-- Tab 1: Catalog -->
+                <div class="tab-content active" id="buyerStorefrontTab">
+                    <div class="catalogue-section">
+                        <div class="section-header">
+                            <h2>Available Products</h2>
+                            <div class="filters">
+                                <button class="filter-btn active" data-cat="all">All</button>
+                                <button class="filter-btn" data-cat="Coffee Beans">Coffee Beans</button>
+                                <button class="filter-btn" data-cat="Dairy">Dairy & Milk</button>
+                                <button class="filter-btn" data-cat="Syrups">Syrups</button>
+                                <button class="filter-btn" data-cat="Equipment">Equipment</button>
+                            </div>
+                        </div>
+                        
+                        <div class="product-grid" id="productGrid">
+                            <div class="loader-container" id="gridLoader"><div class="spinner"></div></div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="product-grid" id="productGrid">
-                    <div class="loader-container" id="gridLoader">
-                        <div class="spinner"></div>
+
+                <!-- Tab 2: Orders -->
+                <div class="tab-content" id="buyerOrdersTab">
+                    <div class="catalogue-section">
+                        <h2>My Order History</h2>
+                        <div class="table-container" style="margin-top:1rem">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Order ID</th>
+                                        <th>Items</th>
+                                        <th>Total Price</th>
+                                        <th>Transport & Destination</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="buyerOrdersBody">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <!-- Product Cards Injected Here -->
                 </div>
+
+                <!-- Shared Checkout Panel for Storefront -->
+                <aside class="side-panel hidden" id="checkoutPanel">
+                    <div class="panel-header">
+                        <h3>Configure Order</h3>
+                        <button class="icon-btn" id="closePanelBtn">×</button>
+                    </div>
+                    
+                    <div class="panel-content" id="panelContent"></div>
+                    
+                    <div class="panel-footer hidden" id="panelFooter">
+                        <div class="price-summary">
+                            <span>Total Checkout:</span>
+                            <h3 id="checkoutTotal">$0.00</h3>
+                        </div>
+                        <button class="btn-primary full-width" id="placeOrderBtn">
+                            Place Order
+                            <div class="spinner hidden" id="orderSpinner"></div>
+                        </button>
+                    </div>
+                </aside>
             </div>
 
-            <!-- Route Optimization & Checkout Panel -->
-            <aside class="checkout-panel hidden" id="checkoutPanel">
-                <div class="panel-header">
-                    <h3>Configure Order</h3>
-                    <button class="icon-btn" id="closePanelBtn">×</button>
-                </div>
+
+            <!-- ================= SELLER VIEW ================= -->
+            <div id="sellerView" class="view-container hidden seller-theme">
                 
-                <div class="panel-content" id="panelContent">
-                    <!-- Product summary injected here -->
+                <!-- Seller Tabs -->
+                <div class="tabs-nav seller-tabs">
+                    <button class="tab-btn active" data-target="sellerInventoryTab">Inventory Management</button>
+                    <button class="tab-btn" data-target="sellerOrdersTab">Incoming Orders</button>
                 </div>
-                
-                <div class="panel-footer hidden" id="panelFooter">
-                    <div class="price-summary">
-                        <span>Total Checkout:</span>
-                        <h3 id="checkoutTotal">$0.00</h3>
+
+                <!-- Tab 1: Inventory -->
+                <div class="tab-content active" id="sellerInventoryTab">
+                    <div class="catalogue-section">
+                        <div class="section-header" style="border-bottom: 1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+                            <h2>Your Active Inventory</h2>
+                            <button class="btn-seller" id="addInventoryBtn">+ Stock New Item</button>
+                        </div>
+                        
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Category</th>
+                                        <th>Unit Price</th>
+                                        <th>Stock Qty</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventoryBody">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <button class="btn-primary full-width" id="placeOrderBtn">
-                        Place Order
-                        <div class="spinner hidden" id="orderSpinner"></div>
-                    </button>
-                    <div id="orderMessage" class="message hidden"></div>
                 </div>
-            </aside>
+
+                <!-- Tab 2: Incoming Orders -->
+                <div class="tab-content" id="sellerOrdersTab">
+                    <div class="catalogue-section">
+                        <h2>Order Fulfillment</h2>
+                        <div class="table-container" style="margin-top:1rem">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Order Ref</th>
+                                        <th>Product Sold</th>
+                                        <th>Qty Needed</th>
+                                        <th>Sale Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sellerOrdersBody">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add/Edit Inventory Panel -->
+                <aside class="side-panel hidden seller-panel" id="inventoryPanel">
+                    <div class="panel-header seller-header">
+                        <h3>Stock Item</h3>
+                        <button class="icon-btn" id="closeInvPanelBtn">×</button>
+                    </div>
+                    
+                    <div class="panel-content">
+                        <div class="config-group">
+                            <label class="config-label">1. Select Master Product</label>
+                            <select id="masterProductSelect" class="form-input">
+                                <option value="">Loading master catalog...</option>
+                            </select>
+                            <p style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.5rem">
+                                Don't see it? <a href="#" id="createNewProductLink" style="color:var(--accent-seller)">Create a new master product</a>
+                            </p>
+                        </div>
+
+                        <!-- Hidden form -->
+                        <div id="newProductForm" class="hidden" style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:8px; margin-bottom:1rem; border:1px solid var(--border);">
+                            <h4 style="margin-bottom:0.5rem; font-size:0.9rem">New Master Product</h4>
+                            <input type="text" id="npName" class="form-input mb-2" placeholder="Product Name (e.g. Vanilla Syrup)">
+                            <input type="text" id="npDesc" class="form-input mb-2" placeholder="Description">
+                            <select id="npCat" class="form-input mb-2">
+                                <option value="Coffee Beans">Coffee Beans</option>
+                                <option value="Dairy">Dairy</option>
+                                <option value="Syrups">Syrups</option>
+                                <option value="Equipment">Equipment</option>
+                            </select>
+                            <input type="number" id="npWeight" class="form-input" placeholder="Weight (kg)" step="0.1">
+                            <button id="saveMasterBtn" class="btn-seller full-width" style="margin-top:0.5rem; padding:0.5rem">Create & Select</button>
+                        </div>
+                        
+                        <div class="config-group">
+                            <label class="config-label">2. Your Listing Details</label>
+                            <input type="number" id="invPrice" class="form-input mb-2" placeholder="Unit Price ($)" step="0.01">
+                            <input type="number" id="invStock" class="form-input mb-2" placeholder="Total Stock Quantity" step="1">
+                        </div>
+                    </div>
+                    
+                    <div class="panel-footer">
+                        <button class="btn-seller full-width" id="saveInventoryBtn">
+                            Publish to Storefront
+                        </button>
+                    </div>
+                </aside>
+            </div>
         </main>
     </div>
 
     <!-- Success Toast -->
-    <div class="toast" id="toast">Order Placed Successfully!</div>
+    <div class="toast" id="toast">Success!</div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 </body>
 </html>
