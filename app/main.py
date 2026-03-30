@@ -1,4 +1,5 @@
 import os
+import math
 import random
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -7,7 +8,8 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-load_dotenv()
+env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(env_path)
 
 # Initialize Supabase client
 url: str = os.environ.get("API_URL", "")
@@ -77,39 +79,32 @@ def get_catalog():
             
     return valid_products
 
+from app.services.transport_engine import compute_routes
+
 @app.get("/api/storefront/routes/{product_id}/{supplier_id}")
-def get_mock_routes(product_id: str, supplier_id: str):
+def get_routes(product_id: str, supplier_id: str):
+    # 1. Fetch transport methods
     transports_res = supabase.table("transport_method").select("*").execute()
     transports = transports_res.data
     if not transports:
         return []
-    routes = []
-    
-    # Mock Route 1: Fastest
-    t_fast = min(transports, key=lambda x: x.get('co2_per_km_kg', 0) * -1)
-    routes.append({
-        "route_id": "route_1_fast",
-        "transport_id": t_fast["transport_id"],
-        "mode": t_fast["mode"],
-        "name": f"Express {t_fast['mode']}",
-        "estimated_days": random.randint(1, 2),
-        "co2_impact_kg": round(random.uniform(50, 100), 2),
-        "shipping_cost": round(random.uniform(50, 150), 2),
-        "tag": "Fastest"
-    })
-    
-    # Mock Route 2: Eco-friendly
-    t_eco = min(transports, key=lambda x: x.get('co2_per_km_kg', 0))
-    routes.append({
-        "route_id": "route_2_eco",
-        "transport_id": t_eco["transport_id"],
-        "mode": t_eco["mode"],
-        "name": f"Green {t_eco['mode']}",
-        "estimated_days": random.randint(3, 10),
-        "co2_impact_kg": round(random.uniform(2, 10), 2),
-        "shipping_cost": round(random.uniform(10, 40), 2),
-        "tag": "Eco-Friendly"
-    })
+        
+    # 2. Fetch Supplier to get their city
+    sup_res = supabase.table("supplier").select("city").eq("supplier_id", supplier_id).execute()
+    if not sup_res.data:
+        supplier_city = "Bogota" # fallback
+    else:
+        supplier_city = sup_res.data[0].get("city", "Bogota")
+        
+    # 3. Fetch Product to get its weight
+    prod_res = supabase.table("product").select("weight_kg").eq("product_id", product_id).execute()
+    if not prod_res.data:
+        weight_kg = 1.0 # fallback
+    else:
+        weight_kg = float(prod_res.data[0].get("weight_kg", 1.0))
+        
+    # 4. Use the Transport Engine to generate optimized and ranked routes
+    routes = compute_routes(supplier_city, weight_kg, transports)
     return routes
 
 @app.post("/api/storefront/order")
@@ -270,8 +265,9 @@ def dismiss_order(order_id: int):
     return {"success": True}
 
 # Mount static files
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
