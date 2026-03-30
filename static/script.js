@@ -89,7 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         mainWorkspace.style.display = 'flex';
         
-        const [prefix, id] = val.split('_');
+        const underscoreIdx = val.indexOf('_');
+        const prefix = val.substring(0, underscoreIdx);
+        const id = val.substring(underscoreIdx + 1);
         state.role = prefix;
         state.activeUserId = id;
 
@@ -148,8 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterBtns = document.querySelectorAll('.filter-btn');
 
     async function fetchCatalog() {
+        // Clear existing cards but keep the loader
+        productGrid.querySelectorAll('.product-card').forEach(c => c.remove());
         gridLoader.classList.remove('hidden');
-        productGrid.innerHTML = '';
         try {
             const res = await fetch('/api/storefront/catalog');
             state.buyerState.catalog = await res.json();
@@ -162,8 +165,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderGrid(data) {
-        productGrid.innerHTML = '';
-        productGrid.appendChild(gridLoader);
+        // Remove only product cards, keep the loader element in the DOM
+        productGrid.querySelectorAll('.product-card').forEach(c => c.remove());
+        gridLoader.classList.add('hidden');
+
+        if (data.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'product-card';
+            empty.style.cssText = 'text-align:center; color:var(--text-secondary); grid-column:1/-1; cursor:default;';
+            empty.innerHTML = '<div class="card-title">No products found</div>';
+            productGrid.appendChild(empty);
+            return;
+        }
+
         data.forEach(p => {
             const suppliersCount = p.supplier_product ? p.supplier_product.length : 0;
             const card = document.createElement('div');
@@ -305,14 +319,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            document.getElementById('qtyInput').addEventListener('input', (e) => {
+            // Use event delegation via a single handler to avoid stacking listeners
+            const qtyInput = document.getElementById('qtyInput');
+            const qtyHandler = (e) => {
                 state.buyerState.quantity = parseInt(e.target.value) || 1;
                 if (state.buyerState.quantity > sp.stock_qty) {
                     state.buyerState.quantity = sp.stock_qty;
                     e.target.value = sp.stock_qty;
                 }
                 updateTotal();
-            });
+            };
+            // Remove any previously attached handler before adding new one
+            if (qtyInput._qtyHandler) {
+                qtyInput.removeEventListener('input', qtyInput._qtyHandler);
+            }
+            qtyInput._qtyHandler = qtyHandler;
+            qtyInput.addEventListener('input', qtyHandler);
 
         } catch(e) { console.error(e); }
     }
