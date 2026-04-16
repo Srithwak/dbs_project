@@ -2,4 +2,4 @@ fastapi
 uvicorn
 supabase
 python-dotenv
-pydanticxj
+pydantic

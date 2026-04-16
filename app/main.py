@@ -1,7 +1,8 @@
 import os
 import math
 import random
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -41,6 +42,7 @@ class OrderRequest(BaseModel):
     total_price: float
     item_co2_kg: float
     ship_addr: str
+    route_legs: list = []  # Multi-leg journey data
 
 class ProductCreate(BaseModel):
     name: str
@@ -61,28 +63,23 @@ class InventoryCreate(BaseModel):
 
 @app.get("/api/storefront/catalog")
 def get_catalog():
-    # Fetch all products and their associated supplier records nested
     res = supabase.table("product").select("*, supplier_product(*, supplier(*))").execute()
     data = res.data or []
     
     valid_products = []
     for p in data:
-        # Protect against non-iterables
         sps = p.get("supplier_product") or []
-        # Filter only in-stock configurations
         stock_sps = [sp for sp in sps if sp.get("stock_qty", 0) > 0]
-        
-        # Return only products that have at least one valid supplier
         if stock_sps:
             p["supplier_product"] = stock_sps
             valid_products.append(p)
             
     return valid_products
 
-from app.services.transport_engine import compute_routes
+from app.services.transport_engine import compute_routes, rank_routes
 
 @app.get("/api/storefront/routes/{product_id}/{supplier_id}")
-def get_routes(product_id: str, supplier_id: str):
+def get_routes(product_id: str, supplier_id: str, preference: str = "balanced", dest_city: str = "New York"):
     # 1. Fetch transport methods
     transports_res = supabase.table("transport_method").select("*").execute()
     transports = transports_res.data
@@ -92,25 +89,25 @@ def get_routes(product_id: str, supplier_id: str):
     # 2. Fetch Supplier to get their city
     sup_res = supabase.table("supplier").select("city").eq("supplier_id", supplier_id).execute()
     if not sup_res.data:
-        supplier_city = "Bogota" # fallback
+        supplier_city = "New York"
     else:
-        supplier_city = sup_res.data[0].get("city", "Bogota")
+        supplier_city = sup_res.data[0].get("city", "New York")
         
     # 3. Fetch Product to get its weight
     prod_res = supabase.table("product").select("weight_kg").eq("product_id", product_id).execute()
     if not prod_res.data:
-        weight_kg = 1.0 # fallback
+        weight_kg = 1.0
     else:
         weight_kg = float(prod_res.data[0].get("weight_kg", 1.0))
         
-    # 4. Use the Transport Engine to generate optimized and ranked routes
-    routes = compute_routes(supplier_city, weight_kg, transports)
+    # 4. Use the Transport Engine to generate multi-leg optimized routes
+    routes = compute_routes(supplier_city, dest_city, weight_kg, transports, preference)
     return routes
 
 @app.post("/api/storefront/order")
 def place_order(order: OrderRequest):
     try:
-        # 1. Fetch current stock to ensure depletion
+        # 1. Fetch current stock
         sp_res = supabase.table("supplier_product").select("stock_qty").eq("supplier_id", order.supplier_id).eq("product_id", order.product_id).execute()
         if not sp_res.data:
             raise Exception("Product/Supplier combo not found.")
@@ -129,26 +126,18 @@ def place_order(order: OrderRequest):
         order_res = supabase.table("orders").insert(order_data).execute()
         new_order_id = order_res.data[0]['order_id']
         
-        # 3. Create the Order Item
+        # 3. Create Order Item(s) — directly with product_id + supplier_id (no involves table)
         item_data = {
             "order_id": new_order_id,
+            "product_id": order.product_id,
+            "supplier_id": order.supplier_id,
             "quantity": order.quantity,
             "unit_price": order.unit_price,
             "item_co2_kg": order.item_co2_kg
         }
-        item_res = supabase.table("order_item").insert(item_data).execute()
-        new_item_id = item_res.data[0]['item_id']
+        supabase.table("order_item").insert(item_data).execute()
         
-        # 4. Create the Involves linkage
-        involves_data = {
-            "supplier_id": order.supplier_id,
-            "product_id": order.product_id,
-            "order_id": new_order_id,
-            "item_id": new_item_id
-        }
-        supabase.table("involves").insert(involves_data).execute()
-        
-        # 5. Inventory Depletion! Remove/decrement stock.
+        # 4. Inventory Depletion
         new_stock = current_stock - order.quantity
         supabase.table("supplier_product").update({"stock_qty": new_stock}).eq("supplier_id", order.supplier_id).eq("product_id", order.product_id).execute()
         
@@ -170,26 +159,23 @@ def get_buyer_orders(user_id: str):
     if not orders: return []
     
     order_ids = [str(o["order_id"]) for o in orders]
-    inv_res = supabase.table("involves").select("*, supplier_product(*, product(*))").in_("order_id", order_ids).execute()
-    involves = inv_res.data or []
     
-    # Flatten product for frontend compatibility
-    for inv in involves:
-        if inv.get("supplier_product") and inv["supplier_product"].get("product"):
-            inv["product"] = inv["supplier_product"]["product"]
-            
-    oi_res = supabase.table("order_item").select("*").in_("order_id", order_ids).execute()
+    # Directly query order_item with nested product lookup via supplier_product
+    oi_res = supabase.table("order_item").select("*, supplier_product(*, product(*))").in_("order_id", order_ids).execute()
     order_items = oi_res.data or []
     
     for o in orders:
         o["order_item"] = []
         matching_ois = [oi for oi in order_items if oi["order_id"] == o["order_id"]]
         for oi in matching_ois:
-            oi_invs = [inv for inv in involves if inv["order_id"] == oi["order_id"] and inv["item_id"] == oi["item_id"]]
+            product_info = None
+            if oi.get("supplier_product") and oi["supplier_product"].get("product"):
+                product_info = oi["supplier_product"]["product"]
             o["order_item"].append({
                 "quantity": oi.get("quantity", 1),
                 "unit_price": oi.get("unit_price", 0),
-                "involves": oi_invs
+                "item_co2_kg": oi.get("item_co2_kg", 0),
+                "product": product_info
             })
     return orders
 
@@ -231,38 +217,46 @@ def delete_inventory(supplier_id: str, product_id: str):
 
 @app.get("/api/seller/orders/{supplier_id}")
 def get_seller_orders(supplier_id: str):
-    res = supabase.table("involves").select("*, supplier_product(*, product(*))").eq("supplier_id", supplier_id).execute()
-    involves = res.data or []
-    if not involves: return []
+    # Query order_items that reference this supplier directly (no involves table)
+    oi_res = supabase.table("order_item").select("*, supplier_product(*, product(*))").eq("supplier_id", supplier_id).execute()
+    items = oi_res.data or []
+    if not items: return []
     
-    order_ids = list(set([str(inv["order_id"]) for inv in involves]))
-    
+    order_ids = list(set([str(item["order_id"]) for item in items]))
     o_res = supabase.table("orders").select("*").in_("order_id", order_ids).execute()
     all_orders = o_res.data or []
     
-    oi_res = supabase.table("order_item").select("*").in_("order_id", order_ids).execute()
-    order_items = oi_res.data or []
-    
-    active_involves = []
-    for inv in involves:
-        matching_order = next((o for o in all_orders if o["order_id"] == inv["order_id"]), None)
+    result = []
+    for item in items:
+        matching_order = next((o for o in all_orders if o["order_id"] == item["order_id"]), None)
         if matching_order and matching_order.get("status") != "dismissed":
-            inv["orders"] = matching_order
-            matching_oi = next((oi for oi in order_items if oi["order_id"] == inv["order_id"] and oi["item_id"] == inv["item_id"]), {})
-            inv["order_item"] = matching_oi
+            product_info = None
+            if item.get("supplier_product") and item["supplier_product"].get("product"):
+                product_info = item["supplier_product"]["product"]
+            result.append({
+                "order_id": item["order_id"],
+                "item_id": item["item_id"],
+                "orders": matching_order,
+                "order_item": item,
+                "product": product_info
+            })
             
-            if inv.get("supplier_product") and inv["supplier_product"].get("product"):
-                 inv["product"] = inv["supplier_product"]["product"]
-                 
-            active_involves.append(inv)
-            
-    return active_involves
+    return result
 
 @app.post("/api/seller/orders/{order_id}/dismiss")
-def dismiss_order(order_id: int):
-    # Update order status to 'dismissed' (using string interpolation for simplicity)
+def dismiss_order(order_id: str):
     res = supabase.table("orders").update({"status": "dismissed"}).eq("order_id", order_id).execute()
     return {"success": True}
+
+# ==========================================
+# TRANSPORT ENGINE API
+# ==========================================
+
+@app.get("/api/transport/cities")
+def get_available_cities():
+    """Return the list of cities the transport engine knows about."""
+    from app.services.transport_engine import CITY_COORDS
+    return [{"name": city, "lat": coords[0], "lng": coords[1]} for city, coords in CITY_COORDS.items()]
 
 # Mount static files
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

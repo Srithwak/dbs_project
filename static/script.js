@@ -2,10 +2,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === GLOBAL STATE ===
     let state = {
-        role: null, // 'buyer' or 'seller'
+        role: null,
         activeUserId: null, 
         users: [],
         suppliers: [],
+        currentPreference: 'balanced',
         
         buyerState: {
             catalog: [],
@@ -20,18 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    let routeMap = null;
+    let routeLayerGroup = null;
+
     // === DOM ELEMENTS ===
     const globalAuthSelect = document.getElementById('globalAuthSelect');
     const globalSearchBar = document.getElementById('globalSearchBar');
     const searchInput = document.getElementById('searchInput');
-    const userCo2Status = document.getElementById('userCo2Status');
     const mainWorkspace = document.getElementById('mainWorkspace');
     const buyerView = document.getElementById('buyerView');
     const sellerView = document.getElementById('sellerView');
     const logoSvg = document.querySelector('.logo svg');
     const toast = document.getElementById('toast');
 
-    // Init App
     initAuthData();
 
     async function initAuthData() {
@@ -65,11 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             globalAuthSelect.appendChild(buyerGroup);
             globalAuthSelect.appendChild(sellerGroup);
-
-            // Change listener
             globalAuthSelect.addEventListener('change', handleAuthChange);
 
-            // Auto-select first buyer for convenience if exists
             if(state.users.length > 0) {
                 globalAuthSelect.value = `buyer_${state.users[0].user_id}`;
                 handleAuthChange();
@@ -83,7 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!val) {
             mainWorkspace.style.display = 'none';
             globalSearchBar.classList.add('hidden');
-            userCo2Status.classList.add('hidden');
             return;
         }
 
@@ -96,36 +94,27 @@ document.addEventListener('DOMContentLoaded', () => {
         state.activeUserId = id;
 
         if (prefix === 'buyer') {
-            // Buyer Mode setup
             buyerView.classList.remove('hidden');
             sellerView.classList.add('hidden');
             globalSearchBar.classList.remove('hidden');
-            userCo2Status.classList.remove('hidden');
             logoSvg.style.color = "var(--accent)";
-            
-            const u = state.users.find(x => x.user_id == id);
-            userCo2Status.textContent = `Target: ${u ? u.co2_per_kg_prod : '--'} CO₂/kg`;
 
             fetchCatalog();
             fetchBuyerOrders();
-            // Reset to first tab
             activateTab('buyerStorefrontTab', buyerView);
         } else {
-            // Seller Mode setup
             sellerView.classList.remove('hidden');
             buyerView.classList.add('hidden');
             globalSearchBar.classList.add('hidden');
-            userCo2Status.classList.add('hidden');
             logoSvg.style.color = "var(--accent-seller)";
 
             fetchSellerInventory();
             fetchSellerOrders();
-            // Reset to first tab
             activateTab('sellerInventoryTab', sellerView);
         }
     }
 
-    // === TAB SWITCHING LOGIC ===
+    // === TAB SWITCHING ===
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const container = e.target.closest('.view-container');
@@ -136,7 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function activateTab(tabId, container) {
         container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         container.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        
         container.querySelector(`[data-target="${tabId}"]`).classList.add('active');
         document.getElementById(tabId).classList.add('active');
     }
@@ -150,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterBtns = document.querySelectorAll('.filter-btn');
 
     async function fetchCatalog() {
-        // Clear existing cards but keep the loader
         productGrid.querySelectorAll('.product-card').forEach(c => c.remove());
         gridLoader.classList.remove('hidden');
         try {
@@ -165,7 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderGrid(data) {
-        // Remove only product cards, keep the loader element in the DOM
         productGrid.querySelectorAll('.product-card').forEach(c => c.remove());
         gridLoader.classList.add('hidden');
 
@@ -188,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="card-weight">${p.weight_kg} kg</span>
                 </div>
                 <div class="card-title">${p.name}</div>
-                <div class="card-desc">${p.description}</div>
+                <div class="card-desc">${p.description || ''}</div>
                 <div class="card-footer">
                     <div class="supplier-count" style="font-size:0.8rem; color:var(--text-secondary)">
                         <span style="background:rgba(255,255,255,0.1); width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; margin-right:4px">${suppliersCount}</span> Seller(s) In Stock
@@ -200,14 +186,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Buyer Search
+    // Search
     searchInput.addEventListener('input', (e) => {
         const q = e.target.value.toLowerCase();
-        const filtered = state.buyerState.catalog.filter(p => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
+        const filtered = state.buyerState.catalog.filter(p => p.name.toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
         renderGrid(filtered);
     });
 
-    // Buyer Filter
+    // Filter
     filterBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             filterBtns.forEach(b => b.classList.remove('active'));
@@ -228,15 +214,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const placeOrderBtn = document.getElementById('placeOrderBtn');
     const orderSpinner = document.getElementById('orderSpinner');
 
-    closePanelBtn.addEventListener('click', () => checkoutPanel.classList.add('hidden'));
+    closePanelBtn.addEventListener('click', () => {
+        checkoutPanel.classList.add('hidden');
+        destroyMap();
+    });
 
     async function openCheckoutPanel(product) {
         state.buyerState.selectedProduct = product;
         state.buyerState.selectedSupplierProd = null;
         state.buyerState.selectedRoute = null;
         state.buyerState.quantity = 1;
+        state.currentPreference = 'balanced';
         checkoutPanel.classList.remove('hidden');
         panelFooter.classList.add('hidden');
+        destroyMap();
         
         const p = product;
         let suppliersHtml = p.supplier_product.map((sp, idx) => `
@@ -261,15 +252,28 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div id="routesGroup" class="hidden" style="display:flex; flex-direction:column; gap:0.75rem; margin-top:1.5rem">
                 <label style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); text-transform:uppercase;">2. Transport Route</label>
+                
+                <div class="preference-toggles" id="preferenceToggles">
+                    <button class="pref-btn active" data-pref="balanced">⚖️ Balanced</button>
+                    <button class="pref-btn" data-pref="fastest">⚡ Fastest</button>
+                    <button class="pref-btn" data-pref="cheapest">💰 Cheapest</button>
+                    <button class="pref-btn" data-pref="greenest">🌿 Eco</button>
+                </div>
+
+                <div id="routeMapContainer" class="route-map-container">
+                    <div id="routeMap" style="width:100%; height:100%;"></div>
+                </div>
+                
                 <div id="routesList" style="display:flex; flex-direction:column; gap:0.5rem"></div>
             </div>
             <div id="qtyGroup" class="hidden" style="display:flex; flex-direction:column; gap:0.75rem; margin-top:1.5rem">
                 <label style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); text-transform:uppercase;">3. Checkout Details</label>
                 <input type="number" id="qtyInput" class="form-input" value="1" min="1" max="999">
-                <input type="text" id="addrInput" class="form-input" style="margin-top:0.5rem" placeholder="Ship to Address..." value="123 Coffee Ave">
+                <input type="text" id="addrInput" class="form-input" style="margin-top:0.5rem" placeholder="Ship to Address..." value="123 Coffee Ave, New York">
             </div>
         `;
 
+        // Supplier selection
         const opts = panelContent.querySelectorAll('.supplier-option');
         opts.forEach(opt => {
             opt.addEventListener('click', (e) => {
@@ -280,46 +284,245 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchRoutes(sp);
             });
         });
+
+        // Preference toggle
+        setTimeout(() => {
+            const prefBtns = document.querySelectorAll('.pref-btn');
+            prefBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    prefBtns.forEach(b => b.classList.remove('active'));
+                    e.currentTarget.classList.add('active');
+                    state.currentPreference = e.currentTarget.dataset.pref;
+                    if (state.buyerState.selectedSupplierProd) {
+                        fetchRoutes(state.buyerState.selectedSupplierProd);
+                    }
+                });
+            });
+        }, 100);
     }
+
+    // ==========================================
+    // MAP FUNCTIONS
+    // ==========================================
+    
+    const ROUTE_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+
+    function initMap() {
+        destroyMap();
+        const mapEl = document.getElementById('routeMap');
+        if (!mapEl) return;
+        
+        routeMap = L.map('routeMap', {
+            zoomControl: true,
+            scrollWheelZoom: true,
+            attributionControl: false,
+        }).setView([30, 0], 2);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 18,
+        }).addTo(routeMap);
+
+        routeLayerGroup = L.layerGroup().addTo(routeMap);
+    }
+
+    function destroyMap() {
+        if (routeMap) {
+            routeMap.remove();
+            routeMap = null;
+            routeLayerGroup = null;
+        }
+    }
+
+    function drawRouteOnMap(route, colorIdx, isSelected) {
+        if (!routeMap || !route.legs) return;
+
+        const color = ROUTE_COLORS[colorIdx % ROUTE_COLORS.length];
+        const opacity = isSelected ? 1.0 : 0.3;
+        const weight = isSelected ? 4 : 2;
+
+        route.legs.forEach((leg, legIdx) => {
+            const latlngs = [
+                [leg.origin_coords[0], leg.origin_coords[1]],
+                [leg.dest_coords[0], leg.dest_coords[1]]
+            ];
+
+            // Polyline
+            const polyline = L.polyline(latlngs, {
+                color: color,
+                weight: weight,
+                opacity: opacity,
+                dashArray: isSelected ? null : '8 4',
+            }).addTo(routeLayerGroup);
+
+            if (isSelected) {
+                polyline.bindPopup(`
+                    <div style="font-family:Outfit,sans-serif; font-size:13px; min-width:140px; color:#333">
+                        <strong>Leg ${legIdx + 1}: ${leg.origin} → ${leg.destination}</strong><br>
+                        <span>🚚 ${leg.transport_mode}</span><br>
+                        <span>📏 ${leg.distance_km.toLocaleString()} km</span><br>
+                        <span>⏱ ${leg.estimated_days} day(s)</span><br>
+                        <span>💰 $${leg.cost.toFixed(2)}</span><br>
+                        <span>🌿 ${leg.co2_kg.toFixed(2)} kg CO₂</span>
+                    </div>
+                `);
+            }
+
+            // Origin marker
+            if (legIdx === 0) {
+                const originIcon = L.divIcon({
+                    className: 'map-marker',
+                    html: `<div style="
+                        width:14px; height:14px; border-radius:50%; 
+                        background:${isSelected ? color : 'rgba(255,255,255,0.3)'}; 
+                        border:2px solid ${isSelected ? '#fff' : 'rgba(255,255,255,0.2)'}; 
+                        box-shadow:0 0 8px ${isSelected ? color : 'transparent'};
+                    "></div>`,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7],
+                });
+                L.marker(latlngs[0], { icon: originIcon })
+                    .addTo(routeLayerGroup)
+                    .bindTooltip(leg.origin, { permanent: isSelected && legIdx === 0, className: 'map-tooltip', direction: 'top', offset: [0, -8] });
+            }
+
+            // Destination marker
+            const isLastLeg = legIdx === route.legs.length - 1;
+            const destIcon = L.divIcon({
+                className: 'map-marker',
+                html: `<div style="
+                    width:${isLastLeg && isSelected ? 18 : 12}px; 
+                    height:${isLastLeg && isSelected ? 18 : 12}px; 
+                    border-radius:50%;
+                    background:${isSelected ? (isLastLeg ? '#fff' : color) : 'rgba(255,255,255,0.3)'}; 
+                    border:2px solid ${isSelected ? color : 'rgba(255,255,255,0.2)'}; 
+                    box-shadow:0 0 ${isSelected ? 12 : 4}px ${isSelected ? color : 'transparent'};
+                "></div>`,
+                iconSize: [isLastLeg ? 18 : 12, isLastLeg ? 18 : 12],
+                iconAnchor: [isLastLeg ? 9 : 6, isLastLeg ? 9 : 6],
+            });
+            L.marker(latlngs[1], { icon: destIcon })
+                .addTo(routeLayerGroup)
+                .bindTooltip(leg.destination, { permanent: isSelected && isLastLeg, className: 'map-tooltip', direction: 'top', offset: [0, -10] });
+        });
+    }
+
+    function renderAllRoutesOnMap(routes, selectedIdx) {
+        if (!routeLayerGroup) return;
+        routeLayerGroup.clearLayers();
+
+        // Draw non-selected first, then selected on top
+        routes.forEach((r, i) => {
+            if (i !== selectedIdx) drawRouteOnMap(r, i, false);
+        });
+        if (selectedIdx >= 0 && selectedIdx < routes.length) {
+            drawRouteOnMap(routes[selectedIdx], selectedIdx, true);
+
+            // Fit map to selected route
+            const sel = routes[selectedIdx];
+            let bounds = [];
+            sel.legs.forEach(l => {
+                bounds.push([l.origin_coords[0], l.origin_coords[1]]);
+                bounds.push([l.dest_coords[0], l.dest_coords[1]]);
+            });
+            if (bounds.length > 0) {
+                routeMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+            }
+        }
+    }
+
+
+    // ==========================================
+    // ROUTE FETCHING & RENDERING
+    // ==========================================
+
+    let currentRoutes = [];
 
     async function fetchRoutes(sp) {
         document.getElementById('routesGroup').classList.remove('hidden');
         document.getElementById('qtyGroup').classList.add('hidden');
         panelFooter.classList.add('hidden');
         const routesList = document.getElementById('routesList');
-        routesList.innerHTML = '<div class="spinner"></div>';
+        routesList.innerHTML = '<div class="spinner" style="margin:1rem auto"></div>';
 
         try {
-            const res = await fetch(`/api/storefront/routes/${state.buyerState.selectedProduct.product_id}/${sp.supplier_id}`);
+            const pref = state.currentPreference || 'balanced';
+            const res = await fetch(`/api/storefront/routes/${state.buyerState.selectedProduct.product_id}/${sp.supplier_id}?preference=${pref}`);
             const routes = await res.json();
+            currentRoutes = routes;
+
+            // Init map
+            initMap();
+
+            if (routes.length === 0) {
+                routesList.innerHTML = '<div style="color:var(--text-secondary); text-align:center; padding:1rem">No routes available</div>';
+                return;
+            }
             
-            routesList.innerHTML = routes.map((r, idx) => `
-                <div class="route-card" data-idx="${idx}">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem">
-                        <strong>${r.name}</strong>
-                        <span style="font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:4px; text-transform:uppercase; font-weight:600; background:rgba(255,255,255,0.1)">${r.tag}</span>
+            routesList.innerHTML = routes.map((r, idx) => {
+                const tagClass = (r.tag || 'Standard').toLowerCase().replace(/[^a-z]/g, '-');
+                const legsHtml = r.legs.map((leg, li) => `
+                    <div class="leg-detail">
+                        <span class="leg-seq">${li + 1}</span>
+                        <span class="leg-cities">${leg.origin} → ${leg.destination}</span>
+                        <span class="leg-mode">${leg.transport_mode}</span>
                     </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem">
-                        <div style="display:flex; flex-direction:column"><span style="font-size:0.65rem; color:var(--text-secondary)">Time</span><span style="font-size:0.85rem; font-family:monospace">${r.estimated_days}d</span></div>
-                        <div style="display:flex; flex-direction:column"><span style="font-size:0.65rem; color:var(--text-secondary)">Cost</span><span style="font-size:0.85rem; font-family:monospace">+$${r.shipping_cost}</span></div>
-                        <div style="display:flex; flex-direction:column"><span style="font-size:0.65rem; color:var(--text-secondary)">CO₂</span><span style="font-size:0.85rem; font-family:monospace; color:#10b981">${r.co2_impact_kg}kg</span></div>
+                `).join('');
+
+                return `
+                <div class="route-card" data-idx="${idx}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+                        <strong style="font-size:0.9rem">${r.name}</strong>
+                        <span class="route-tag tag-${tagClass}">${r.tag}</span>
+                    </div>
+                    <div class="route-legs-list">${legsHtml}</div>
+                    <div class="route-metrics">
+                        <div class="metric">
+                            <span class="metric-label">⏱ Time</span>
+                            <span class="metric-value">${r.estimated_days}d</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">💰 Cost</span>
+                            <span class="metric-value">+$${r.shipping_cost.toFixed(2)}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">🌿 CO₂</span>
+                            <span class="metric-value co2-val">${r.co2_impact_kg.toFixed(1)}kg</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">📏 Dist</span>
+                            <span class="metric-value">${r.total_distance_km.toLocaleString()}km</span>
+                        </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
+
+            // Draw first route as selected by default
+            renderAllRoutesOnMap(routes, 0);
 
             const cards = routesList.querySelectorAll('.route-card');
             cards.forEach(c => {
                 c.addEventListener('click', (e) => {
                     cards.forEach(x => x.classList.remove('active'));
                     e.currentTarget.classList.add('active');
-                    state.buyerState.selectedRoute = routes[e.currentTarget.dataset.idx];
+                    const idx = parseInt(e.currentTarget.dataset.idx);
+                    state.buyerState.selectedRoute = routes[idx];
+                    renderAllRoutesOnMap(routes, idx);
                     document.getElementById('qtyGroup').classList.remove('hidden');
                     panelFooter.classList.remove('hidden');
                     updateTotal();
                 });
             });
 
-            // Use event delegation via a single handler to avoid stacking listeners
+            // Auto-select first route
+            if (cards.length > 0) {
+                cards[0].classList.add('active');
+                state.buyerState.selectedRoute = routes[0];
+                document.getElementById('qtyGroup').classList.remove('hidden');
+                panelFooter.classList.remove('hidden');
+                updateTotal();
+            }
+
+            // Qty handler
             const qtyInput = document.getElementById('qtyInput');
             const qtyHandler = (e) => {
                 state.buyerState.quantity = parseInt(e.target.value) || 1;
@@ -329,7 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 updateTotal();
             };
-            // Remove any previously attached handler before adding new one
             if (qtyInput._qtyHandler) {
                 qtyInput.removeEventListener('input', qtyInput._qtyHandler);
             }
@@ -366,7 +568,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 unit_price: bs.selectedSupplierProd.price,
                 total_price: (bs.selectedSupplierProd.price * bs.quantity) + bs.selectedRoute.shipping_cost,
                 item_co2_kg: bs.selectedRoute.co2_impact_kg,
-                ship_addr: addr
+                ship_addr: addr,
+                route_legs: bs.selectedRoute.legs || []
             };
 
             const res = await fetch('/api/storefront/order', {
@@ -377,9 +580,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if(res.ok) {
                 checkoutPanel.classList.add('hidden');
+                destroyMap();
                 showToast('Order Placed! Inventory Depleted. 📦', '#10B981');
                 fetchCatalog(); 
-                fetchBuyerOrders(); // update orders history
+                fetchBuyerOrders();
             } else {
                 alert("Failed to place order.");
             }
@@ -409,25 +613,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // sort desc by order_id
-            orders.sort((a,b) => b.order_id - a.order_id).forEach(o => {
-                // Determine item string
+            orders.sort((a,b) => (b.order_date || '').localeCompare(a.order_date || '')).forEach(o => {
                 let itemNames = [];
+                let totalCo2 = 0;
                 if(o.order_item) {
                     o.order_item.forEach(oi => {
-                        if(oi.involves && oi.involves[0] && oi.involves[0].product) {
-                            itemNames.push(`${oi.quantity}x ${oi.involves[0].product.name}`);
+                        if(oi.product) {
+                            itemNames.push(`${oi.quantity}x ${oi.product.name}`);
                         }
+                        totalCo2 += parseFloat(oi.item_co2_kg || 0);
                     });
                 }
                 const itemStr = itemNames.join(', ') || 'Unknown Items';
                 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-family:monospace; color:var(--text-secondary)">#${o.order_id}</td>
+                    <td style="font-family:monospace; color:var(--text-secondary); font-size:0.8rem">${(o.order_id || '').substring(0,8)}...</td>
                     <td><strong style="color:#fff">${itemStr}</strong></td>
-                    <td style="font-family:monospace; color:#fff">$${o.total_price.toFixed(2)}</td>
-                    <td><span style="font-size:0.85rem; color:var(--text-secondary)">To: ${o.ship_addr}</span></td>
+                    <td style="font-family:monospace; color:#fff">$${(o.total_price || 0).toFixed(2)}</td>
+                    <td><span class="co2-badge">${totalCo2.toFixed(1)} kg CO₂</span></td>
                     <td><span class="status-badge ${o.status}">${o.status}</span></td>
                 `;
                 buyerOrdersBody.appendChild(tr);
@@ -441,8 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const inventoryBody = document.getElementById('inventoryBody');
     const addInventoryBtn = document.getElementById('addInventoryBtn');
-    
-    // Seller Panel
     const inventoryPanel = document.getElementById('inventoryPanel');
     const closeInvPanelBtn = document.getElementById('closeInvPanelBtn');
     const masterProductSelect = document.getElementById('masterProductSelect');
@@ -479,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(isOut) tr.style.opacity = '0.5';
             
             tr.innerHTML = `
-                <td><strong style="color:#fff">${p.name}</strong><br><span style="font-size:0.8rem;color:var(--text-secondary)">${p.description.substring(0,30)}...</span></td>
+                <td><strong style="color:#fff">${p.name}</strong><br><span style="font-size:0.8rem;color:var(--text-secondary)">${(p.description || '').substring(0,30)}...</span></td>
                 <td><span style="font-size:0.75rem; background:rgba(255,255,255,0.1); padding:0.2rem 0.5rem; border-radius:4px;">${p.category}</span></td>
                 <td style="font-family:monospace; color:#fff">$${item.price.toFixed(2)}</td>
                 <td><span class="badge-stock ${isLow ? 'low' : 'good'}">${item.stock_qty} ${isOut ? '(Out)' : ''}</span></td>
@@ -506,7 +708,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Add New Inventory Flow
     addInventoryBtn.addEventListener('click', () => {
         inventoryPanel.classList.remove('hidden');
         newProductForm.classList.add('hidden');
@@ -593,15 +794,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             const res = await fetch(`/api/seller/orders/${state.activeUserId}`);
-            const involvements = await res.json();
+            const items = await res.json();
             
             sellerOrdersBody.innerHTML = '';
-            if(involvements.length === 0) {
+            if(items.length === 0) {
                 sellerOrdersBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-secondary)">No incoming orders.</td></tr>';
                 return;
             }
 
-            involvements.forEach(inv => {
+            items.forEach(inv => {
                 const o = inv.orders;
                 const oi = inv.order_item;
                 const p = inv.product;
@@ -609,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-family:monospace; color:var(--text-secondary)">#${o.order_id}</td>
+                    <td style="font-family:monospace; color:var(--text-secondary); font-size:0.8rem">${(o.order_id || '').substring(0,8)}...</td>
                     <td><strong style="color:#fff">${p.name}</strong></td>
                     <td style="font-family:monospace; font-weight:600">${oi.quantity} <span style="font-size:0.75rem; color:var(--text-secondary)">units</span></td>
                     <td style="font-family:monospace; color:var(--accent-seller)">$${(oi.unit_price * oi.quantity).toFixed(2)}</td>
@@ -622,11 +823,11 @@ document.addEventListener('DOMContentLoaded', () => {
             disBtns.forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const oid = e.currentTarget.dataset.oid;
-                    if(!confirm(`Dismiss Order #${oid}?`)) return;
+                    if(!confirm(`Dismiss Order #${oid.substring(0,8)}?`)) return;
                     try {
                         await fetch(`/api/seller/orders/${oid}/dismiss`, { method: 'POST' });
-                        showToast(`Order #${oid} Dismissed`, '#9ca3af');
-                        fetchSellerOrders(); // refresh table
+                        showToast(`Order Dismissed`, '#9ca3af');
+                        fetchSellerOrders();
                     } catch(err) { console.error('Failed to dismiss'); }
                 });
             });

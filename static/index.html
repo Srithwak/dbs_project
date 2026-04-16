@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Coffee Supply Procurement</title>
+    <meta name="description" content="SupplyTrack - Coffee supply chain procurement with transport optimization and carbon footprint tracking">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3">
+    <!-- Leaflet.js for interactive maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
     <div class="app-bg"></div>
@@ -30,8 +34,6 @@
                     </svg>
                     <input type="text" id="searchInput" placeholder="Search beans, milks...">
                 </div>
-                
-                <span class="co2-status hidden" id="userCo2Status">Target: -- CO₂</span>
 
                 <!-- SINGLE GLOBAL DROPDOWN -->
                 <div style="display:flex; flex-direction:column; align-items:flex-end">
@@ -85,7 +87,7 @@
                                         <th>Order ID</th>
                                         <th>Items</th>
                                         <th>Total Price</th>
-                                        <th>Transport & Destination</th>
+                                        <th>CO₂ Impact</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
@@ -232,6 +234,6 @@
     <!-- Success Toast -->
     <div class="toast" id="toast">Success!</div>
 
-    <script src="script.js?v=3"></script>
+    <script src="script.js?v=5"></script>
 </body>
 </html>

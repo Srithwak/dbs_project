@@ -39,6 +39,7 @@ class OrderRequest(BaseModel):
     total_price: float
     item_co2_kg: float
     ship_addr: str
+    route_legs: list = []
 
 class ProductCreate(BaseModel):
     name: str
@@ -59,18 +60,13 @@ class InventoryCreate(BaseModel):
 
 @app.get("/api/storefront/catalog")
 def get_catalog():
-    # Fetch all products and their associated supplier records nested
     res = supabase.table("product").select("*, supplier_product(*, supplier(*))").execute()
     data = res.data or []
     
     valid_products = []
     for p in data:
-        # Protect against non-iterables
         sps = p.get("supplier_product") or []
-        # Filter only in-stock configurations
         stock_sps = [sp for sp in sps if sp.get("stock_qty", 0) > 0]
-        
-        # Return only products that have at least one valid supplier
         if stock_sps:
             p["supplier_product"] = stock_sps
             valid_products.append(p)
@@ -85,7 +81,6 @@ def get_mock_routes(product_id: str, supplier_id: str):
         return []
     routes = []
     
-    # Mock Route 1: Fastest
     t_fast = min(transports, key=lambda x: x.get('co2_per_km_kg', 0) * -1)
     routes.append({
         "route_id": "route_1_fast",
@@ -98,7 +93,6 @@ def get_mock_routes(product_id: str, supplier_id: str):
         "tag": "Fastest"
     })
     
-    # Mock Route 2: Eco-friendly
     t_eco = min(transports, key=lambda x: x.get('co2_per_km_kg', 0))
     routes.append({
         "route_id": "route_2_eco",
@@ -115,7 +109,6 @@ def get_mock_routes(product_id: str, supplier_id: str):
 @app.post("/api/storefront/order")
 def place_order(order: OrderRequest):
     try:
-        # 1. Fetch current stock to ensure depletion
         sp_res = supabase.table("supplier_product").select("stock_qty").eq("supplier_id", order.supplier_id).eq("product_id", order.product_id).execute()
         if not sp_res.data:
             raise Exception("Product/Supplier combo not found.")
@@ -123,7 +116,6 @@ def place_order(order: OrderRequest):
         if current_stock < order.quantity:
             raise Exception("Insufficient Stock")
             
-        # 2. Create the Order
         order_data = {
             "user_id": order.user_id,
             "transport_id": order.transport_id,
@@ -134,26 +126,17 @@ def place_order(order: OrderRequest):
         order_res = supabase.table("orders").insert(order_data).execute()
         new_order_id = order_res.data[0]['order_id']
         
-        # 3. Create the Order Item
+        # Order item now includes product_id and supplier_id directly
         item_data = {
             "order_id": new_order_id,
+            "product_id": order.product_id,
+            "supplier_id": order.supplier_id,
             "quantity": order.quantity,
             "unit_price": order.unit_price,
             "item_co2_kg": order.item_co2_kg
         }
-        item_res = supabase.table("order_item").insert(item_data).execute()
-        new_item_id = item_res.data[0]['item_id']
+        supabase.table("order_item").insert(item_data).execute()
         
-        # 4. Create the Involves linkage
-        involves_data = {
-            "supplier_id": order.supplier_id,
-            "product_id": order.product_id,
-            "order_id": new_order_id,
-            "item_id": new_item_id
-        }
-        supabase.table("involves").insert(involves_data).execute()
-        
-        # 5. Inventory Depletion! Remove/decrement stock.
         new_stock = current_stock - order.quantity
         supabase.table("supplier_product").update({"stock_qty": new_stock}).eq("supplier_id", order.supplier_id).eq("product_id", order.product_id).execute()
         
@@ -175,26 +158,21 @@ def get_buyer_orders(user_id: str):
     if not orders: return []
     
     order_ids = [str(o["order_id"]) for o in orders]
-    inv_res = supabase.table("involves").select("*, supplier_product(*, product(*))").in_("order_id", order_ids).execute()
-    involves = inv_res.data or []
-    
-    # Flatten product for frontend compatibility
-    for inv in involves:
-        if inv.get("supplier_product") and inv["supplier_product"].get("product"):
-            inv["product"] = inv["supplier_product"]["product"]
-            
-    oi_res = supabase.table("order_item").select("*").in_("order_id", order_ids).execute()
+    oi_res = supabase.table("order_item").select("*, supplier_product(*, product(*))").in_("order_id", order_ids).execute()
     order_items = oi_res.data or []
     
     for o in orders:
         o["order_item"] = []
         matching_ois = [oi for oi in order_items if oi["order_id"] == o["order_id"]]
         for oi in matching_ois:
-            oi_invs = [inv for inv in involves if inv["order_id"] == oi["order_id"] and inv["item_id"] == oi["item_id"]]
+            product_info = None
+            if oi.get("supplier_product") and oi["supplier_product"].get("product"):
+                product_info = oi["supplier_product"]["product"]
             o["order_item"].append({
                 "quantity": oi.get("quantity", 1),
                 "unit_price": oi.get("unit_price", 0),
-                "involves": oi_invs
+                "item_co2_kg": oi.get("item_co2_kg", 0),
+                "product": product_info
             })
     return orders
 
@@ -236,36 +214,33 @@ def delete_inventory(supplier_id: str, product_id: str):
 
 @app.get("/api/seller/orders/{supplier_id}")
 def get_seller_orders(supplier_id: str):
-    res = supabase.table("involves").select("*, supplier_product(*, product(*))").eq("supplier_id", supplier_id).execute()
-    involves = res.data or []
-    if not involves: return []
+    oi_res = supabase.table("order_item").select("*, supplier_product(*, product(*))").eq("supplier_id", supplier_id).execute()
+    items = oi_res.data or []
+    if not items: return []
     
-    order_ids = list(set([str(inv["order_id"]) for inv in involves]))
-    
+    order_ids = list(set([str(item["order_id"]) for item in items]))
     o_res = supabase.table("orders").select("*").in_("order_id", order_ids).execute()
     all_orders = o_res.data or []
     
-    oi_res = supabase.table("order_item").select("*").in_("order_id", order_ids).execute()
-    order_items = oi_res.data or []
-    
-    active_involves = []
-    for inv in involves:
-        matching_order = next((o for o in all_orders if o["order_id"] == inv["order_id"]), None)
+    result = []
+    for item in items:
+        matching_order = next((o for o in all_orders if o["order_id"] == item["order_id"]), None)
         if matching_order and matching_order.get("status") != "dismissed":
-            inv["orders"] = matching_order
-            matching_oi = next((oi for oi in order_items if oi["order_id"] == inv["order_id"] and oi["item_id"] == inv["item_id"]), {})
-            inv["order_item"] = matching_oi
+            product_info = None
+            if item.get("supplier_product") and item["supplier_product"].get("product"):
+                product_info = item["supplier_product"]["product"]
+            result.append({
+                "order_id": item["order_id"],
+                "item_id": item["item_id"],
+                "orders": matching_order,
+                "order_item": item,
+                "product": product_info
+            })
             
-            if inv.get("supplier_product") and inv["supplier_product"].get("product"):
-                 inv["product"] = inv["supplier_product"]["product"]
-                 
-            active_involves.append(inv)
-            
-    return active_involves
+    return result
 
 @app.post("/api/seller/orders/{order_id}/dismiss")
-def dismiss_order(order_id: int):
-    # Update order status to 'dismissed' (using string interpolation for simplicity)
+def dismiss_order(order_id: str):
     res = supabase.table("orders").update({"status": "dismissed"}).eq("order_id", order_id).execute()
     return {"success": True}
 

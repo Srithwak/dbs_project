@@ -5,10 +5,8 @@
     --text-primary: #F3F4F6;
     --text-secondary: #9CA3AF;
     --accent: #10B981;
-    /* Buyer Accent: Green */
     --accent-hover: #059669;
     --accent-seller: #f59e0b;
-    /* Seller Accent: Amber */
     --accent-seller-hover: #d97706;
     --error: #ef4444;
     --border: rgba(255, 255, 255, 0.08);
@@ -130,19 +128,6 @@ body {
     background: var(--bg-main);
 }
 
-.co2-status {
-    font-size: 0.8rem;
-    color: var(--accent);
-    font-weight: 600;
-    background: rgba(16, 185, 129, 0.1);
-    padding: 0.4rem 1rem;
-    border-radius: 99px;
-}
-
-.co2-status.hidden {
-    display: none;
-}
-
 /* Workspace */
 .workspace {
     display: flex;
@@ -201,7 +186,6 @@ body {
     border-bottom-color: var(--accent);
 }
 
-/* Seller Theme overrides */
 .seller-theme .tabs-nav .tab-btn.active {
     color: var(--accent-seller);
     border-bottom-color: var(--accent-seller);
@@ -276,7 +260,7 @@ body {
 
 /* Common Side Panel */
 .side-panel {
-    width: 400px;
+    width: 440px;
     background: var(--bg-panel);
     border-left: 1px solid var(--border);
     backdrop-filter: blur(20px);
@@ -316,6 +300,11 @@ body {
     width: 4px;
 }
 
+.panel-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+}
+
 .panel-footer {
     padding: 1.5rem;
     border-top: 1px solid var(--border);
@@ -336,7 +325,7 @@ body {
     transform: scale(1.1);
 }
 
-/* --- BUYER SPECIFIC --- */
+/* --- BUYER PRODUCT GRID --- */
 .product-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -442,23 +431,245 @@ body {
     background: rgba(16, 185, 129, 0.05);
 }
 
+/* ==========================================
+   ROUTE CARDS - Multi-Leg
+   ========================================== */
+
 .route-card {
     border: 1px solid var(--border);
     background: rgba(0, 0, 0, 0.2);
     border-radius: 10px;
     padding: 1rem;
     cursor: pointer;
-    transition: 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
+}
+
+.route-card:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.03);
 }
 
 .route-card.active {
     border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.05);
-    box-shadow: 0 0 0 1px #3b82f6 inset;
+    background: rgba(59, 130, 246, 0.08);
+    box-shadow: 0 0 0 1px #3b82f6 inset, 0 4px 12px rgba(59, 130, 246, 0.15);
 }
+
+/* Route Tags */
+.route-tag {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.tag-recommended {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.tag-fastest {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3B82F6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.tag-eco-friendly {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22C55E;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.tag-cheapest {
+    background: rgba(245, 158, 11, 0.2);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.tag-standard {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+}
+
+/* Route Legs List */
+.route-legs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.leg-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.leg-seq {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.2);
+    color: #3B82F6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.leg-cities {
+    font-weight: 500;
+    color: #e5e7eb;
+    flex: 1;
+}
+
+.leg-mode {
+    font-size: 0.65rem;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    color: var(--text-secondary);
+}
+
+/* Route Metrics */
+.route-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 0.4rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+}
+
+.metric-label {
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-size: 0.8rem;
+    font-family: monospace;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+.metric-value.co2-val {
+    color: #10B981;
+}
+
+/* ==========================================
+   PREFERENCE TOGGLES
+   ========================================== */
+
+.preference-toggles {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.pref-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.3rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.pref-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.pref-btn.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3B82F6;
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================
+   ROUTE MAP CONTAINER
+   ========================================== */
+
+.route-map-container {
+    width: 100%;
+    height: 220px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+    position: relative;
+}
+
+.route-map-container .leaflet-container {
+    background: #0B0E14 !important;
+}
+
+/* Leaflet tooltip styling */
+.map-tooltip {
+    background: rgba(15, 18, 25, 0.92) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    color: #fff !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+}
+
+.map-tooltip::before {
+    border-top-color: rgba(15, 18, 25, 0.92) !important;
+}
+
+.map-marker {
+    background: transparent !important;
+    border: none !important;
+}
+
+/* ==========================================
+   CO₂ BADGE
+   ========================================== */
+
+.co2-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+    font-family: monospace;
+    font-weight: 600;
+    color: #10B981;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* ==========================================
+   BUTTONS
+   ========================================== */
 
 .btn-primary {
     background: var(--accent);
@@ -616,6 +827,12 @@ tr:hover td {
     border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
+.status-badge.pending {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
 .status-badge.dismissed {
     background: rgba(156, 163, 175, 0.1);
     color: #9ca3af;
@@ -677,4 +894,23 @@ tr:hover td {
 
 .toast.show {
     transform: translateX(-50%) translateY(0);
+}
+
+/* Price summary */
+.price-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.price-summary span {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.price-summary h3 {
+    color: #fff;
+    font-size: 1.3rem;
+    font-family: monospace;
 }
