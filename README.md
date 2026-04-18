@@ -1,4 +1,4 @@
-# SupplyTrack
+# CarbonCoffee
 
 A supply-chain procurement and order management system built with **FastAPI**, **Supabase (PostgreSQL)**, and a **vanilla HTML/CSS/JS** frontend. The centrepiece feature is a **transport optimization engine** that ranks shipping routes by cost, delivery time, and carbon footprint according to user preferences.
 
