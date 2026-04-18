@@ -17,10 +17,27 @@ if %ERRORLEVEL% neq 0 (
 echo Found Python:
 python --version
 
-REM Install dependencies using the same Python that is in PATH
+REM Create virtual environment if it doesn't exist
+if not exist "venv\" (
+    echo.
+    echo Creating virtual environment...
+    python -m venv venv
+    if %ERRORLEVEL% neq 0 (
+        echo ERROR: Failed to create virtual environment.
+        pause
+        exit /b 1
+    )
+)
+
+REM Activate the virtual environment
+echo.
+echo Activating virtual environment...
+call venv\Scripts\activate.bat
+
+REM Install / upgrade dependencies
 echo.
 echo Installing dependencies...
-python -m pip install -r requirements.txt --quiet
+pip install -r requirements.txt --quiet
 
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Failed to install dependencies.
@@ -31,7 +48,7 @@ if %ERRORLEVEL% neq 0 (
 echo Dependencies installed successfully.
 echo.
 
-REM Run uvicorn using the same Python (avoids version mismatch)
+REM Run the app
 echo Starting server at http://127.0.0.1:8000 ...
 echo Press CTRL+C to stop the server.
 echo.
